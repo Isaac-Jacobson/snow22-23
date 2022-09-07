@@ -1,0 +1,24 @@
+Naming convention for original images and cropped flake images
+
+For initial images:
+	Information that needs to be included in original image names:
+	- Image # (6 digits with leading zeros)
+	- Date(DD-MM-YY) and time?(Maybe we don't need time)
+	- Camera #
+
+	Ex:
+		(Image#)_(Cam#)_(Date(DD-MM-YY)).png
+		000713_Cam4_11-08-22.png
+	Similar to old convention but removes the "Flake", shortens the date, removes the time
+
+For cropped flakes:
+	Information that needs to be included:
+	- Original image #
+	- Flake # (Padding not needed)
+	- Camera #
+	- I don't think we need date or time
+	- May need locational information of where the flake is was in original image (XXX-YYY of center of flake)
+
+	Ex:
+		(Image#)_(Cam#)_(Flake#)_(XXX-YYY).png
+		000712_Cam4_Flake1_150-735.png
