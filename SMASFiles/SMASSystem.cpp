@@ -88,6 +88,12 @@ int setProperty(Camera& camera, Property& property, PropertyType type,
 	return 0;
 }
 
+int get_current_second() {
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	return st.wSecond;
+}
+
 string get_time()
 {
 	//Function to get the current timestamp and turn it into a string
@@ -115,6 +121,39 @@ string get_time()
 	stime += to_string(seconds);
 	stime += "-";
 	stime += to_string(milliseconds);
+	return stime;
+}
+
+// returns a string of int i of length length
+// for example make_fixed_length(2, 4) will return a string with "0002"
+string make_fixed_length(const int i, const int length) {
+	ostringstream ostr;
+	if (i < 0)
+		ostr << '-';
+	ostr << setfill('0') << setw(length) << (i < 0 ? -1 : i);
+	return ostr.str();
+}
+
+// returns a string for YYYYMMDDHHMMSS
+string get_time_2() {
+	//Function to get the current timestamp and turn it into a string
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	string stime;
+	unsigned int year = st.wYear;
+	unsigned int month = st.wMonth;
+	unsigned int hours = st.wHour;
+	unsigned int minutes = st.wMinute;
+	unsigned int seconds = st.wSecond;
+	unsigned int milliseconds = st.wMilliseconds;
+	unsigned int day = st.wDay;
+	//Concatenate the time stamp string
+	stime += make_fixed_length(year, 4);
+	stime += make_fixed_length(month, 2);
+	stime += make_fixed_length(day, 2);
+	stime += make_fixed_length(hours, 2);
+	stime += make_fixed_length(minutes, 2);
+	stime += make_fixed_length(seconds, 2);
 	return stime;
 }
 
@@ -169,7 +208,7 @@ string dateandhour(string str, string deli = " ")
 	return retStr;
 }
 
-static const void saveImage(Image& im, int count, int picNum, string id, string root, string logFilePath) {
+static const void saveImage(Image& im, int count, int picNum, string id, string root, string logFilePath, int secondcount) {
 	//creating a folder for each hour of capturing
 	std::cout << "saveImage called, Camera ID: " << id << " Count: " << count << endl;
 	//string logStr = "Camera ID " + id + " Saved " + time_stamped_folder;
@@ -197,6 +236,7 @@ static const void saveImage(Image& im, int count, int picNum, string id, string 
 
 	//cout << "saving. ID: " << id << "\n";
 	string t = get_time();
+	string t2 = get_time_2();
 
 	// Create formatted string so that images are sorted as they get put into the folder
 	char fileName[100];
@@ -215,9 +255,19 @@ static const void saveImage(Image& im, int count, int picNum, string id, string 
 	char* c_t = new char[t.length() + 1];
 	strcpy_s(c_t, t.length() + 1, t.c_str());
 
+	char* c_t2 = new char[t2.length() + 1];
+	strcpy_s(c_t2, t2.length() + 1, t2.c_str());
+	
+	string secondcount_str = make_fixed_length(secondcount, 3);
+	char* c_secondcount = new char[secondcount_str.length() + 1];
+	strcpy_s(c_secondcount, secondcount_str.length() + 1, secondcount_str.c_str());
+
 	//cout << c_time_stamped_path << " and " << c_id << " and " << c_t << "\n";
-	sprintf_s(fileName, "%s/Flake%.6u_Cam%s_%u_%s.bmp", c_time_stamped_path, count, c_id, picNum, c_t);
-//scott update later	//sprintf_s(fileName, "%s/", c_time_stamped_path, count, c_id, picNum, c_t);
+	//sprintf_s(fileName, "%s/Flake%.6u_Cam%s_%u_%s.bmp", c_time_stamped_path, count, c_id, picNum, c_t); //old image file name saving convention
+	//cout << "  OG: " << fileName << "\n";
+	sprintf_s(fileName, "%s/%s%sCAM%s_%u.bmp", c_time_stamped_path, c_t2, c_secondcount, c_id, picNum); // new image file name saving convention: path/YYYYMMDDHHMMSS{secondcount}Cam#_#
+	//cout << "  new: " << fileName << "\n";
+	//cout << "  global count: " << secondcount << "\n";
 	//printf("%s", fileName);
 
 	string file = time_stamped_path + "/Flake" + to_string(count) + "_Cam" + id + "_" + to_string(picNum) + "_" + t + ".bmp";
@@ -249,6 +299,8 @@ public:
 	string logFilePath;
 	string baselogFilePath;
 	int lasthour;
+	int lastsecond;
+	int secondcount;
 
 	SSS_Camera()
 	{
@@ -270,6 +322,8 @@ public:
 		this->logFilePath = "C:\\Users\\Z440\\oneDrive - Colostate\\Desktop\\Logs\\Logs.txt";
 		this->baselogFilePath= "C:\\Users\\Z440\\oneDrive - Colostate\\Desktop\\Logs\\";
 		this->lasthour = -1;
+		this->lastsecond = -1;
+		this->secondcount = -1;
 		if (this->id == 1)
 		{
 			//When high speed camera is being run
@@ -312,6 +366,12 @@ public:
 				this->logFilePath = finalLogPath;
 			}
 
+			int current_second = get_current_second();
+			if (current_second != lastsecond) {
+				this->lastsecond = current_second;
+				secondcount = 0;
+			}
+
 			if (this->id == 1) {
 			//if (false){
 				Error error0;
@@ -322,7 +382,7 @@ public:
    				if (hasPicture0 == false) {
 					error0 = this->cam->RetrieveBuffer(&this->Im); // checks if image was captured, returns PGERROR_OK is true
 					string errorDescription0 = error0.GetDescription();
-					if (errorDescription0 != "No buffer arrived within the specified timeout.") {
+					if (errorDescription0 != "No buffer arrived within the specified timeout." && errorDescription0 != "Ok.") {
 						cout << "Error returned by RetrieveBuffer (cam1,image0): " << error0.GetDescription() << id << "\n";
 						cout << "error0: ";
 						PrintError(error0);
@@ -333,7 +393,7 @@ public:
 				if (hasPicture0 == true && hasPicture1 == false) {
 					error1 = this->cam->RetrieveBuffer(&this->Im1);
 					string errorDescription1 = error1.GetDescription();
-					if (errorDescription1 != "No buffer arrived within the specified timeout.") {
+					if (errorDescription1 != "No buffer arrived within the specified timeout." && errorDescription1 != "Ok.") {
 						cout << "Error returned by RetrieveBuffer (cam1,image1): " << error1.GetDescription() << id << "\n";
 					}
 				}
@@ -351,8 +411,8 @@ public:
 
 					// Set the shutter property of the camera
 					Property shutterProp;
-					float HS_Shutter = 20.0f;//500.0f;
-					float HS_Gain = 1.0f;
+					float HS_Shutter = 5.0f;//500.0f;
+					float HS_Gain = 50.0f;
 					if (setProperty(*cam, shutterProp, SHUTTER, HS_Shutter) != 0)
 					{
 						std::cout << "  SMAS: could not set shutter property." << endl;
@@ -394,8 +454,8 @@ public:
 					hasPicture1 = true;
 
 					Property shutterProp;
-					float HS_Shutter = 0.2f;//3.0f;//500.0f;
-					float HS_Gain = 35.0f;//10.0f;
+					float HS_Shutter = 0.025f;//3.0f;//500.0f; changed to 0.025 from 0.2 11/19/22
+					float HS_Gain = 70.0f;//10.0f;
 					if (setProperty(*cam, shutterProp, SHUTTER, HS_Shutter) != 0)
 					{
 						std::cout << "  SMAS: could not set shutter property." << endl;
@@ -420,8 +480,9 @@ public:
 				bool t = true;
 				if (allowSave.compare_exchange_strong(t, false)) {
 					imagesCapturedSinceSave = 0;
-					thread saveThread(saveImage, Im, (int)globalFlakeCount, 1, id, root, logFilePath);
-					thread saveThread2(saveImage, Im1, (int)globalFlakeCount, 2, id, root, logFilePath);
+					thread saveThread(saveImage, Im, (int)globalFlakeCount, 1, id, root, logFilePath, secondcount);
+					thread saveThread2(saveImage, Im1, (int)globalFlakeCount, 2, id, root, logFilePath, secondcount);
+					secondcount++;
 					saveThread.detach();
 					saveThread2.detach();
 					//NOW WE HAVE TO RESET THE HASPICTURE VARIABLES
@@ -448,7 +509,8 @@ public:
 				bool t = true;
 				if (allowSave.compare_exchange_strong(t, false)) {
 					imagesCapturedSinceSave = 0;
-					thread saveThread(saveImage, Im, (int)globalFlakeCount, 1, id, root, logFilePath);
+					thread saveThread(saveImage, Im, (int)globalFlakeCount, 1, id, root, logFilePath, secondcount);
+					secondcount++;
 					saveThread.detach();
 				}
 			}
@@ -616,6 +678,13 @@ void static updateAtomics(int numThreads, std::atomic<bool>& program_is_running,
 		Sleep(DWORD(2));
 	}
 }
+//Software tigger of camera 1 
+void triggerOne(Camera* cam, char* path, Image &Im)
+{
+	cam->FireSoftwareTrigger(true);
+	cam->RetrieveBuffer(&Im);
+	Im.Save(path);
+}
 
 int main(int /*argc*/, char** /*argv*/)
 {
@@ -637,9 +706,9 @@ int main(int /*argc*/, char** /*argv*/)
 									//NOTE: Calibration overrides highSpeedTrail (if calibration == true, higSpeedTrail ignored)
 	//Manual Values for shutter and gain
 	float calShutter = 0.025f; // Changed from 2 to 1 1/3/22, Changed from 1 to 0.7 1/18/22, Changed from 0.2 to 0.025 on 11/15/22
-	float calGain = 35.0f; // Changed from 15.0 to 18.0 1/18/22
+	float calGain = 70.0f; // Changed from 15.0 to 18.0 1/18/22
 	float HS_Shutter = 0.025f;//500.0f; Changed from 0.2 to 0.025 on 11/15/22
-	float HS_Gain = 35.0f;
+	float HS_Gain = 70.0f;
 	float cam6_Gain = 20.0f;  // Changed from 5 to 6 1/18/22
 
 	//*******************************************************************************************************************
@@ -725,6 +794,32 @@ int main(int /*argc*/, char** /*argv*/)
 			return -1;
 		}
 		//Initializing the camera serial numbers and sorting the array of camera objects
+	
+		if (camInfo.serialNumber == 15444692) {
+			ppCamerasSorted[0] = ppCameras[i]; //15444692 = camera 0
+			std::cout << "Camera 0 is declared" << "\n";
+		}
+		if (camInfo.serialNumber == 15444697) {
+			ppCamerasSorted[1] = ppCameras[i]; //15444697 = camera 2
+			std::cout << "Camera 2 is declared" << "\n";
+		}
+		if (camInfo.serialNumber == 15444687) {
+			ppCamerasSorted[2] = ppCameras[i]; //15444687 = camera 3
+			std::cout << "Camera 3 is declared" << "\n";
+		}
+		if (camInfo.serialNumber == 15405697) {
+			ppCamerasSorted[3] = ppCameras[i]; //15405697 = camera 4
+			std::cout << "Camera 4 is declared" << "\n";
+		}
+		if (camInfo.serialNumber == 15444696) {
+			ppCamerasSorted[4] = ppCameras[i]; //15444696 = camera 5
+			std::cout << "Camera 5 is declared" << "\n";
+		}
+		if (camInfo.serialNumber == 15444691) {
+			ppCamerasSorted[5] = ppCameras[i]; //15444691 = camera 6
+			std::cout << "Camera 6 is declared" << "\n";
+		}
+/*
 		if (camInfo.serialNumber == 15444692) {
 			ppCamerasSorted[0] = ppCameras[i]; //15444692 = camera 0
 			std::cout << "Camera 0 is declared" << "\n";
@@ -753,6 +848,7 @@ int main(int /*argc*/, char** /*argv*/)
 			ppCamerasSorted[6] = ppCameras[i]; //15444691 = camera 6
 			std::cout << "Camera 6 is declared" << "\n";
 		}
+*/
 	}
 	//cout << "The whole array: " << ppCamerasSorted << endl;
 	//cout << "The 0th instance: " << ppCamerasSorted[1] << endl;
